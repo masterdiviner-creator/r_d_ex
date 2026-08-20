@@ -1,6 +1,6 @@
 {
       "version": 1,
-      "author": "Your Name",
+      "author": "Serhii Myrko",
       "editor": "wokwi",
       "parts": [
         {
@@ -22,7 +22,7 @@
           "id": "led1",
           "top": 140,
           "left": 208,
-          "attrs": { "color": "red" }
+          "attrs": { "color": "purple" }
         }
       ],
       "connections": [

@@ -1,56 +1,49 @@
 #include <Arduino.h>
 
-// Таймер для сенсора
-unsigned long lastSensorRead = 0;
-#define SENSOR_INTERVAL 20000  // 20 секунд
+// Інтервали — через #define, для економії пам'яті 
+// препроцессор не займає RAM як окрема змінна)
+#define SENSOR_INTERVAL 20000UL  // 20 секунд
+#define HEAP_INTERVAL   60000UL  // 1 хвилина
 
-// Структура для зберігання даних сенсора
+unsigned long lastSensorRead = 0;
+unsigned long lastHeapCheck = 0;
+
+// Структура даних сенсора: температура, вологість, часова мітка
 struct SensorData {
-  float temperature;       // 4 байти
-  uint8_t status;          // 1 байт — бітові флаги
-  unsigned long timestamp; // 4 байти
+  float temperature;
+  float humidity;
+  unsigned long timestamp;
 };
 
-// Біт 0 = Wi-Fi connected
-uint8_t checkWifi() {
-  return 0b00000001;
-}
-
-// Біт 1 = sensor ok
-uint8_t checkSensor() {
-  return 0b00000010;
-}
-
-// Приймає вказівник — не копію структури
-void printData(SensorData* data) {
-  static int callCount = 0;
-  callCount++;
-
-  Serial.println("--- Reading #" + String(callCount) + " ---");
-  Serial.println("Temp: " + String(data->temperature) + " C");
-  Serial.println("Status: " + String(data->status));
-  Serial.println("Time: " + String(data->timestamp) + " ms");
-  Serial.println("Free heap: " + String(ESP.getFreeHeap()) + " bytes");
-  Serial.println("---");
-}
-
-SensorData readSensor() {
-  SensorData data;
-
-  data.temperature = 23.5;
-  data.timestamp = millis();
-
-  // Бітові флаги
-  data.status = 0b00000000 | checkWifi();
-  data.status = data.status | checkSensor();
-
+// Виділяє SensorData у HEAP (new), заповнює даними.
+// Температура і вологість — випадкові, timestamp — реальний час (НЕ випадковий).
+// Викликач відповідає за delete (див. loop()).
+SensorData* readSensor() {
+  SensorData* data = new SensorData();
+  data->temperature = random(15, 31);  // [15, 30] включно
+  data->humidity = random(30, 66);     // [30, 65] включно
+  data->timestamp = millis();
   return data;
 }
 
+// Приймає вказівник (не копію), форматує через snprintf, без String
+void printSensorData(const SensorData* data) {
+  char buffer[80];
+  snprintf(buffer, sizeof(buffer),
+           "Temp: %.1f C, Humidity: %.1f %%, Time: %lu ms",
+           data->temperature, data->humidity, data->timestamp);
+  Serial.println(buffer);
+}
+
+void printFreeHeap() {
+  char buffer[48];
+  snprintf(buffer, sizeof(buffer), "[Heap check] Free heap: %u bytes", ESP.getFreeHeap());
+  Serial.println(buffer);
+}
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(500); // дати час порту "піднятися" перед першим виводом
 }
 
 void loop() {
@@ -59,9 +52,13 @@ void loop() {
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now;
 
-    SensorData reading;
-    reading = readSensor();
-    printData(&reading);
+    SensorData* reading = readSensor();  // виділили в heap
+    printSensorData(reading);
+    delete reading;                      // обов'язково звільнили — без цього стався б memory leak
   }
 
+  if (now - lastHeapCheck >= HEAP_INTERVAL) {
+    lastHeapCheck = now;
+    printFreeHeap();
+  }
 }
